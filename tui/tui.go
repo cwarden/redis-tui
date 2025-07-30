@@ -164,6 +164,91 @@ func NewRedisTUI(redisClient api.RedisClient, maxKeyLimit int, version string, g
 			}
 		}
 
+		// Handle j/k keys for vim-style navigation
+		if event.Key() == tcell.KeyRune {
+			currentFocus := ui.app.GetFocus()
+			switch event.Rune() {
+			case 'j': // Move down
+				// Check if the current focus is on the keyItemsPanel
+				if currentFocus == ui.keyItemsPanel {
+					currentItem := ui.keyItemsPanel.GetCurrentItem()
+					if currentItem < ui.keyItemsPanel.GetItemCount()-1 {
+						ui.keyItemsPanel.SetCurrentItem(currentItem + 1)
+					}
+					return nil
+				}
+				// Check if the current focus is on the outputPanel
+				if currentFocus == ui.outputPanel {
+					currentItem := ui.outputPanel.GetCurrentItem()
+					if currentItem < ui.outputPanel.GetItemCount()-1 {
+						ui.outputPanel.SetCurrentItem(currentItem + 1)
+					}
+					return nil
+				}
+				// Check if the current focus is on the commandResultPanel (value pane)
+				if currentFocus == ui.commandResultPanel {
+					row, col := ui.commandResultPanel.GetScrollOffset()
+					ui.commandResultPanel.ScrollTo(row+1, col)
+					return nil
+				}
+				// Handle List views (mainListView, mainHashView)
+				if list, ok := currentFocus.(*tview.List); ok {
+					currentItem := list.GetCurrentItem()
+					if currentItem < list.GetItemCount()-1 {
+						list.SetCurrentItem(currentItem + 1)
+					}
+					return nil
+				}
+				// Handle TextView (mainStringView)
+				if textView, ok := currentFocus.(*tview.TextView); ok {
+					row, col := textView.GetScrollOffset()
+					textView.ScrollTo(row+1, col)
+					return nil
+				}
+			case 'k': // Move up
+				// Check if the current focus is on the keyItemsPanel
+				if currentFocus == ui.keyItemsPanel {
+					currentItem := ui.keyItemsPanel.GetCurrentItem()
+					if currentItem > 0 {
+						ui.keyItemsPanel.SetCurrentItem(currentItem - 1)
+					}
+					return nil
+				}
+				// Check if the current focus is on the outputPanel
+				if currentFocus == ui.outputPanel {
+					currentItem := ui.outputPanel.GetCurrentItem()
+					if currentItem > 0 {
+						ui.outputPanel.SetCurrentItem(currentItem - 1)
+					}
+					return nil
+				}
+				// Check if the current focus is on the commandResultPanel (value pane)
+				if currentFocus == ui.commandResultPanel {
+					row, col := ui.commandResultPanel.GetScrollOffset()
+					if row > 0 {
+						ui.commandResultPanel.ScrollTo(row-1, col)
+					}
+					return nil
+				}
+				// Handle List views (mainListView, mainHashView)
+				if list, ok := currentFocus.(*tview.List); ok {
+					currentItem := list.GetCurrentItem()
+					if currentItem > 0 {
+						list.SetCurrentItem(currentItem - 1)
+					}
+					return nil
+				}
+				// Handle TextView (mainStringView)
+				if textView, ok := currentFocus.(*tview.TextView); ok {
+					row, col := textView.GetScrollOffset()
+					if row > 0 {
+						textView.ScrollTo(row-1, col)
+					}
+					return nil
+				}
+			}
+		}
+
 		return event
 	})
 
