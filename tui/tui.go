@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -63,6 +65,8 @@ type RedisTUI struct {
 
 	searchKeyHistories  []string
 	commandKeyHistories []string
+	formatJSON          bool
+	currentKey          string
 }
 
 // NewRedisTUI create a RedisTUI object
@@ -136,6 +140,21 @@ func NewRedisTUI(redisClient api.RedisClient, maxKeyLimit int, version string, g
 			return nil
 		case "quit":
 			ui.app.Stop()
+		case "toggle_json":
+			ui.formatJSON = !ui.formatJSON
+			if ui.formatJSON {
+				ui.outputChan <- core.OutputMessage{Color: tcell.ColorGreen, Message: "JSON formatting enabled"}
+			} else {
+				ui.outputChan <- core.OutputMessage{Color: tcell.ColorYellow, Message: "JSON formatting disabled"}
+			}
+			// Refresh the current key if one is selected
+			if ui.currentKey != "" {
+				currentIndex := ui.keyItemsPanel.GetCurrentItem()
+				if currentIndex >= 0 {
+					go ui.itemSelectedHandler(currentIndex, ui.currentKey)()
+				}
+			}
+			return nil
 		case "command":
 			if ui.commandMode {
 				ui.commandMode = false
@@ -502,7 +521,7 @@ func (ui *RedisTUI) createCommandPanel() *tview.Flex {
 
 			ui.outputChan <- core.OutputMessage{Color: tcell.ColorGreen, Message: fmt.Sprintf("Command %s succeed", cmdText)}
 			ui.uiViewUpdateChan <- func() {
-				resultPanel.SetText(output)
+				resultPanel.SetText(ui.formatValue(output))
 			}
 		}(cmdText)
 
@@ -725,9 +744,10 @@ func (ui *RedisTUI) createHelpPanel() *tview.Flex {
 
 	ui.helpMessagePanel = tview.NewTextView()
 	ui.helpMessagePanel.SetTextColor(tcell.ColorOrange).SetText(fmt.Sprintf(
-		" ❈ %s - open command panel, %s - switch focus, %s - quit",
+		" ❈ %s - open command panel, %s - switch focus, %s - toggle JSON format, %s - quit",
 		ui.keyBindings.Name("command"),
 		ui.keyBindings.Name("switch_focus"),
+		ui.keyBindings.Name("toggle_json"),
 		ui.keyBindings.Name("quit"),
 	))
 
@@ -751,6 +771,7 @@ func (ui *RedisTUI) createKeySelectedHandler() func(index int, key string) func(
 
 	return func(index int, key string) func() {
 		return func() {
+			ui.currentKey = key
 			keyType, err := ui.redisClient.Type(key).Result()
 			if err != nil {
 				ui.outputChan <- core.OutputMessage{Color: tcell.ColorRed, Message: fmt.Sprintf("errors: %s", err)}
@@ -788,7 +809,7 @@ func (ui *RedisTUI) createKeySelectedHandler() func(index int, key string) func(
 					return
 				}
 
-				ui.mainPanel.AddItem(mainStringView.SetText(fmt.Sprintf(" %s", result)), 0, 1, false)
+				ui.mainPanel.AddItem(mainStringView.SetText(fmt.Sprintf(" %s", ui.formatValue(result))), 0, 1, false)
 				ui.focusPrimitives = append(ui.focusPrimitives, primitiveKey{Primitive: mainStringView, Key: ui.keyBindings.KeyID("key_string_value")})
 			case "list":
 				values, err := ui.redisClient.LRange(key, 0, 1000).Result()
@@ -852,7 +873,7 @@ func (ui *RedisTUI) createKeySelectedHandler() func(index int, key string) func(
 								return
 							}
 
-							mainStringView.SetText(fmt.Sprintf(" %s", val)).SetTitle(fmt.Sprintf(" Value: %s ", k))
+							mainStringView.SetText(fmt.Sprintf(" %s", ui.formatValue(val))).SetTitle(fmt.Sprintf(" Value: %s ", k))
 						}
 					})(k))
 				}
@@ -875,4 +896,26 @@ func limit(input []string, maxReturn int) []string {
 	}
 
 	return input[:maxReturn]
+}
+
+func (ui *RedisTUI) formatValue(value string) string {
+	if !ui.formatJSON {
+		return value
+	}
+
+	// Try to parse as JSON
+	var jsonData interface{}
+	if err := json.Unmarshal([]byte(value), &jsonData); err != nil {
+		// Not valid JSON, return as is
+		return value
+	}
+
+	// Pretty print the JSON
+	var prettyJSON bytes.Buffer
+	if err := json.Indent(&prettyJSON, []byte(value), "", "  "); err != nil {
+		// If indent fails, return original
+		return value
+	}
+
+	return prettyJSON.String()
 }
