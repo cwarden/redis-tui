@@ -1,7 +1,10 @@
 package api
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"io/ioutil"
 	"strings"
 	"sync"
 	"time"
@@ -27,14 +30,65 @@ type RedisClient interface {
 	Process(cmd redis.Cmder) error
 	Do(args ...interface{}) *redis.Cmd
 	Info(section ...string) *redis.StringCmd
+	Subscribe(channels ...string) *redis.PubSub
+	ConfigSet(parameter, value string) *redis.StatusCmd
+}
+
+// createTLSConfig creates a TLS configuration based on the provided settings
+func createTLSConfig(conf config.Config) (*tls.Config, error) {
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: !conf.TLSVerify,
+	}
+
+	// Load client certificate if provided
+	if conf.TLSCert != "" && conf.TLSKey != "" {
+		cert, err := tls.LoadX509KeyPair(conf.TLSCert, conf.TLSKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load client certificate: %v", err)
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+
+	// Load CA certificate if provided
+	if conf.TLSCACert != "" {
+		caCert, err := ioutil.ReadFile(conf.TLSCACert)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read CA certificate: %v", err)
+		}
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("failed to parse CA certificate")
+		}
+		tlsConfig.RootCAs = caCertPool
+	}
+
+	return tlsConfig, nil
 }
 
 // NewRedisClient create a new redis client which wraps single or cluster client
 func NewRedisClient(conf config.Config, outputChan chan core.OutputMessage) RedisClient {
+	var tlsConfig *tls.Config
+	var err error
+
+	// Create TLS configuration if enabled
+	if conf.TLS {
+		tlsConfig, err = createTLSConfig(conf)
+		if err != nil {
+			// Log error to output channel
+			outputChan <- core.OutputMessage{
+				Color:   tcell.ColorRed,
+				Message: fmt.Sprintf("TLS configuration error: %v", err),
+			}
+			// Continue without TLS rather than failing completely
+			tlsConfig = nil
+		}
+	}
+
 	if conf.Cluster {
 		options := &redis.ClusterOptions{
-			Addrs:    []string{fmt.Sprintf("%s:%d", conf.Host, conf.Port)},
-			Password: conf.Password,
+			Addrs:     []string{fmt.Sprintf("%s:%d", conf.Host, conf.Port)},
+			Password:  conf.Password,
+			TLSConfig: tlsConfig,
 		}
 
 		return redis.NewClusterClient(options)
@@ -46,6 +100,7 @@ func NewRedisClient(conf config.Config, outputChan chan core.OutputMessage) Redi
 		Password:     conf.Password,
 		WriteTimeout: 3 * time.Second,
 		ReadTimeout:  2 * time.Second,
+		TLSConfig:    tlsConfig,
 	}
 
 	client := redis.NewClient(options)
@@ -114,7 +169,7 @@ func KeysWithLimit(client RedisClient, key string, maxScanCount int) (redisKeys 
 	var keys []string
 
 	var scanCount = 0
-	for scanCount < maxScanCount || maxScanCount == -1{
+	for scanCount < maxScanCount || maxScanCount == -1 {
 		scanCount++
 
 		keys, cursor, err = client.Scan(cursor, key, 100).Result()
