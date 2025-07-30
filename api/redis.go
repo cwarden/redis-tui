@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mylxsw/redis-tui/config"
-	"github.com/mylxsw/redis-tui/core"
+	"github.com/cwarden/redis-tui/config"
+	"github.com/cwarden/redis-tui/core"
 
 	"github.com/gdamore/tcell"
 	"github.com/go-redis/redis"

@@ -2,6 +2,8 @@
 
 A Redis Text-based UI client in CLI.
 
+*Forked from https://github.com/mylxsw/redis-tui*
+
 ![](./preview.gif)
 
 ## Features
@@ -14,7 +16,7 @@ A Redis Text-based UI client in CLI.
 ## Installation
 
 ```bash
-go get github.com/mylxsw/redis-tui
+go install github.com/cwarden/redis-tui@latest
 ```
 
 Or build from source:
@@ -85,6 +87,7 @@ redis-tui -vvv
 - `F7` / `Ctrl+A`: View string value
 - `F9` / `Ctrl+O`: Output panel
 - `Tab`: Switch focus between panels
+- `j` / `k`: Navigate up and down within panel
 - `Esc` / `Ctrl+Q`: Quit
 
 ## TODO
@@ -95,6 +98,3 @@ redis-tui -vvv
 - [ ] The return value of the `SCAN` command is not formatted correctly
 
 
-## Stargazers over time
-
-[![Stargazers over time](https://starchart.cc/mylxsw/redis-tui.svg)](https://starchart.cc/mylxsw/redis-tui)

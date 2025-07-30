@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cwarden/redis-tui/api"
+	"github.com/cwarden/redis-tui/config"
+	"github.com/cwarden/redis-tui/core"
 	"github.com/gdamore/tcell"
 	"github.com/mylxsw/go-toolkit/collection"
-	"github.com/mylxsw/redis-tui/api"
-	"github.com/mylxsw/redis-tui/config"
-	"github.com/mylxsw/redis-tui/core"
 	"github.com/rivo/tview"
 )
 

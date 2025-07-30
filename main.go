@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mylxsw/redis-tui/api"
-	"github.com/mylxsw/redis-tui/config"
-	"github.com/mylxsw/redis-tui/core"
-	"github.com/mylxsw/redis-tui/tui"
+	"github.com/cwarden/redis-tui/api"
+	"github.com/cwarden/redis-tui/config"
+	"github.com/cwarden/redis-tui/core"
+	"github.com/cwarden/redis-tui/tui"
 )
 
 var conf = config.Config{}
