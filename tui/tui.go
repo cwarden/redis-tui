@@ -67,6 +67,7 @@ type RedisTUI struct {
 	commandKeyHistories []string
 	formatJSON          bool
 	currentKey          string
+	currentZsetIndex    int
 }
 
 // NewRedisTUI create a RedisTUI object
@@ -85,6 +86,7 @@ func NewRedisTUI(redisClient api.RedisClient, maxKeyLimit int, version string, g
 		uiViewUpdateChan:    make(chan func()),
 		searchKeyHistories:  make([]string, 0),
 		commandKeyHistories: make([]string, 0),
+		currentZsetIndex:    -1,
 	}
 
 	ui.welcomeScreen = tview.NewTextView().SetTitle("Hello, world!")
@@ -784,6 +786,14 @@ func (ui *RedisTUI) createKeySelectedHandler() func(index int, key string) func(
 				return
 			}
 
+			// Capture the current selection state before clearing for ZSETs
+			if keyType == "zset" && mainListView.GetItemCount() > 0 {
+				ui.currentZsetIndex = mainListView.GetCurrentItem()
+			} else if keyType != "zset" {
+				// Reset ZSET index when switching to a different key type
+				ui.currentZsetIndex = -1
+			}
+
 			// 移除主区域的边框，因为展示区域已经带有边框了
 			ui.mainPanel.RemoveItem(ui.welcomeScreen).SetBorder(false)
 
@@ -848,14 +858,33 @@ func (ui *RedisTUI) createKeySelectedHandler() func(index int, key string) func(
 
 				mainListView.ShowSecondaryText(true)
 				for i, z := range values {
+					memberStr := fmt.Sprintf("%v", z.Member)
 					val := fmt.Sprintf(" %3d | %v", i+1, z.Member)
 					score := fmt.Sprintf("    Score: %v", z.Score)
 
-					mainListView.AddItem(val, score, 0, nil)
+					mainListView.AddItem(val, score, 0, (func(index int, memberStr string, score float64) func() {
+						return func() {
+							ui.currentZsetIndex = index
+							formattedValue := ui.formatValue(memberStr)
+							mainStringView.SetText(fmt.Sprintf(" %s", formattedValue)).SetTitle(fmt.Sprintf(" Value (Score: %v) ", score))
+						}
+					})(i, memberStr, z.Score))
 				}
 
-				ui.mainPanel.AddItem(mainListView, 0, 1, false)
+				ui.mainPanel.AddItem(mainListView, 0, 3, false).
+					AddItem(mainStringView, 0, 7, false)
 				ui.focusPrimitives = append(ui.focusPrimitives, primitiveKey{Primitive: mainListView, Key: ui.keyBindings.KeyID("key_list_value")})
+				ui.focusPrimitives = append(ui.focusPrimitives, primitiveKey{Primitive: mainStringView, Key: ui.keyBindings.KeyID("key_string_value")})
+
+				// Restore the previously selected item and trigger its handler
+				if ui.currentZsetIndex >= 0 && ui.currentZsetIndex < len(values) {
+					mainListView.SetCurrentItem(ui.currentZsetIndex)
+					// Trigger the selection handler for the restored item
+					z := values[ui.currentZsetIndex]
+					memberStr := fmt.Sprintf("%v", z.Member)
+					formattedValue := ui.formatValue(memberStr)
+					mainStringView.SetText(fmt.Sprintf(" %s", formattedValue)).SetTitle(fmt.Sprintf(" Value (Score: %v) ", z.Score))
+				}
 
 			case "hash":
 				hashKeys, err := ui.redisClient.HKeys(key).Result()
